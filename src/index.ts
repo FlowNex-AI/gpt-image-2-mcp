@@ -11,8 +11,9 @@ import {
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { GoogleGenAI } from "@google/genai";
+import OpenAI, { toFile } from "openai";
 import fs from "fs/promises";
+import { createReadStream } from "fs";
 import path from "path";
 import { VERSION } from "./version.js";
 
@@ -20,15 +21,27 @@ import { VERSION } from "./version.js";
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MODEL = "gemini-3.1-flash-image-preview";
-const IMAGE_MODEL_PATTERN = /-image(-preview)?$/;
-const GEMINI_3X_PATTERN = /gemini-3\./;
+const DEFAULT_MODEL = "gpt-image-2";
 
-const VALID_RESOLUTIONS = new Set(["1K", "2K", "4K"]);
-const VALID_THINKING = new Set(["minimal", "high"]);
+const SIZE_PRESETS = new Set([
+  "1024x1024",
+  "1536x1024",
+  "1024x1536",
+  "2048x2048",
+  "auto",
+]);
+
+const SIZE_PATTERN = /^(\d+)x(\d+)$/;
+const MIN_TOTAL_PIXELS = 655_360;
+const MAX_TOTAL_PIXELS = 8_294_400;
+const MAX_EDGE_PX = 3840;
+const VALID_QUALITY = new Set(["low", "medium", "high", "auto"]);
+const VALID_OUTPUT_FORMATS = new Set(["png", "jpeg", "webp"]);
+const VALID_BACKGROUNDS = new Set(["opaque", "auto"]);
 const ALLOWED_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const MAX_IMAGE_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_NUMBER_OF_IMAGES = 4;
+const MAX_REFERENCE_IMAGES = 16;
 
 interface SavedImage {
   filePath: string;
@@ -38,10 +51,11 @@ interface SavedImage {
 }
 
 interface ImageParams {
-  aspectRatio: string;
-  resolution: string;
-  thinking: string;
+  size: string;
+  quality: string;
   numberOfImages: number;
+  outputFormat: string;
+  background: string;
   returnInlineImage: boolean;
 }
 
@@ -50,24 +64,16 @@ interface ImageParams {
 // ---------------------------------------------------------------------------
 
 function getModelId(): string {
-  return process.env.NANO_BANANA_MODEL || DEFAULT_MODEL;
-}
-
-function isImageModel(modelId: string): boolean {
-  return IMAGE_MODEL_PATTERN.test(modelId);
-}
-
-function supportsThinking(modelId: string): boolean {
-  return isImageModel(modelId) && GEMINI_3X_PATTERN.test(modelId);
+  return process.env.OPENAI_IMAGE_MODEL || DEFAULT_MODEL;
 }
 
 function getOutputDir(): string {
-  return process.env.NANO_BANANA_OUTPUT_DIR || path.join(process.cwd(), "generated_imgs");
+  return process.env.MCP_GPT_IMAGE_2_OUTPUT_DIR || path.join(process.cwd(), "generated_imgs");
 }
 
 function resolveInlineImage(perCall: boolean | undefined): boolean {
   if (perCall !== undefined) return perCall;
-  const env = process.env.NANO_BANANA_INLINE_IMAGE;
+  const env = process.env.MCP_GPT_IMAGE_2_INLINE_IMAGE;
   if (env !== undefined) return env === "true";
   return true; // default
 }
@@ -78,8 +84,10 @@ function extensionToMime(ext: string): string {
   return "image/jpeg";
 }
 
-function mimeToExtension(mime: string): string {
-  return mime === "image/jpeg" ? ".jpg" : ".png";
+function outputFormatToMime(format: string): string {
+  if (format === "jpeg") return "image/jpeg";
+  if (format === "webp") return "image/webp";
+  return "image/png";
 }
 
 function randomId(): string {
@@ -94,6 +102,36 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function validateSize(size: string): void {
+  if (SIZE_PRESETS.has(size)) return;
+  const match = SIZE_PATTERN.exec(size);
+  if (!match) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Invalid size "${size}". Use a preset (${[...SIZE_PRESETS].join(", ")}) or custom WxH like "1280x720".`,
+    );
+  }
+  const w = Number(match[1]);
+  const h = Number(match[2]);
+  if (w % 16 !== 0 || h % 16 !== 0) {
+    throw new McpError(ErrorCode.InvalidParams, `Custom size "${size}" must have both edges as multiples of 16.`);
+  }
+  if (w > MAX_EDGE_PX || h > MAX_EDGE_PX) {
+    throw new McpError(ErrorCode.InvalidParams, `Custom size "${size}" max edge is ${MAX_EDGE_PX}px.`);
+  }
+  const total = w * h;
+  if (total < MIN_TOTAL_PIXELS || total > MAX_TOTAL_PIXELS) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Custom size "${size}" total pixels (${total}) must be between ${MIN_TOTAL_PIXELS} and ${MAX_TOTAL_PIXELS}.`,
+    );
+  }
+  const ratio = Math.max(w, h) / Math.min(w, h);
+  if (ratio > 3) {
+    throw new McpError(ErrorCode.InvalidParams, `Custom size "${size}" long-edge to short-edge ratio (${ratio.toFixed(2)}) must not exceed 3:1.`);
+  }
 }
 
 async function validateImagePath(filePath: string): Promise<void> {
@@ -129,25 +167,32 @@ async function validateImagePath(filePath: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const imageParamProperties = {
-  aspectRatio: {
+  size: {
     type: "string" as const,
-    description: "Aspect ratio (e.g. \"1:1\", \"16:9\", \"9:16\", \"4:3\", \"3:4\"). Passed through to API.",
-    default: "1:1",
+    description:
+      "Image dimensions. Presets: \"1024x1024\" (square), \"1536x1024\" (landscape), \"1024x1536\" (portrait), \"2048x2048\" (square hi-res), \"auto\". Custom \"WxH\" also accepted: edges multiples of 16, max edge 3840px, total pixels 655,360–8,294,400, ratio ≤ 3:1.",
+    default: "1024x1024",
   },
-  resolution: {
+  quality: {
     type: "string" as const,
-    description: "Image resolution: \"1K\", \"2K\", or \"4K\".",
-    default: "1K",
-  },
-  thinking: {
-    type: "string" as const,
-    description: "Thinking level: \"minimal\" or \"high\". Higher thinking improves complex prompts.",
-    default: "minimal",
+    description:
+      "Rendering quality: \"low\", \"medium\", \"high\", or \"auto\". Higher quality increases latency and cost.",
+    default: "auto",
   },
   numberOfImages: {
     type: "number" as const,
-    description: "Number of images to generate (1–4). Multiple images saved with sequential suffixes.",
+    description: "Number of images to generate (1–4).",
     default: 1,
+  },
+  outputFormat: {
+    type: "string" as const,
+    description: "Output file format: \"png\" (default), \"jpeg\", or \"webp\".",
+    default: "png",
+  },
+  background: {
+    type: "string" as const,
+    description: "Background handling: \"opaque\" or \"auto\". Transparent backgrounds are not supported by gpt-image-2.",
+    default: "auto",
   },
   returnInlineImage: {
     type: "boolean" as const,
@@ -159,14 +204,14 @@ const imageParamProperties = {
 // Server
 // ---------------------------------------------------------------------------
 
-class NanoBanana2MCP {
+class GptImage2MCP {
   private server: Server;
-  private genAI: GoogleGenAI | null = null;
+  private openai: OpenAI | null = null;
   private lastImagePath: string | null = null;
 
   constructor() {
     this.server = new Server(
-      { name: "nano-banana-2", version: VERSION },
+      { name: "gpt-image-2", version: VERSION },
       { capabilities: { tools: {} } },
     );
     this.setupHandlers();
@@ -176,17 +221,17 @@ class NanoBanana2MCP {
   // Init
   // -------------------------------------------------------------------------
 
-  private initGenAI(): GoogleGenAI {
-    if (this.genAI) return this.genAI;
-    const apiKey = process.env.GEMINI_API_KEY;
+  private initOpenAI(): OpenAI {
+    if (this.openai) return this.openai;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new McpError(
         ErrorCode.InvalidRequest,
-        "GEMINI_API_KEY environment variable is required. Set it in your MCP server config.",
+        "OPENAI_API_KEY environment variable is required. Set it in your MCP server config.",
       );
     }
-    this.genAI = new GoogleGenAI({ apiKey });
-    return this.genAI;
+    this.openai = new OpenAI({ apiKey });
+    return this.openai;
   }
 
   // -------------------------------------------------------------------------
@@ -199,7 +244,7 @@ class NanoBanana2MCP {
         {
           name: "generate_image",
           description:
-            "Generate a NEW image from text prompt. Use this ONLY when creating a completely new image, not when modifying an existing one.",
+            "Generate a NEW image from text prompt using OpenAI gpt-image-2. Use this ONLY when creating a completely new image, not when modifying an existing one.",
           inputSchema: {
             type: "object",
             properties: {
@@ -215,7 +260,7 @@ class NanoBanana2MCP {
         {
           name: "edit_image",
           description:
-            "Edit a SPECIFIC existing image file, optionally using additional reference images. Use this when you have the exact file path of an image to modify.",
+            "Edit a SPECIFIC existing image file with OpenAI gpt-image-2, optionally using additional reference images. Use this when you have the exact file path of an image to modify.",
           inputSchema: {
             type: "object",
             properties: {
@@ -230,7 +275,11 @@ class NanoBanana2MCP {
               referenceImages: {
                 type: "array",
                 items: { type: "string" },
-                description: "Optional array of file paths to additional reference images",
+                description: "Optional array of file paths to additional reference images (up to 15 in addition to the main image, 16 total)",
+              },
+              mask: {
+                type: "string",
+                description: "Optional file path to a PNG mask. Transparent pixels indicate the area to edit; must match the main image dimensions.",
               },
               ...imageParamProperties,
             },
@@ -253,6 +302,10 @@ class NanoBanana2MCP {
                 items: { type: "string" },
                 description: "Optional array of file paths to additional reference images",
               },
+              mask: {
+                type: "string",
+                description: "Optional file path to a PNG mask matching the last image dimensions",
+              },
               ...imageParamProperties,
             },
             required: ["prompt"],
@@ -260,7 +313,7 @@ class NanoBanana2MCP {
         },
         {
           name: "get_configuration_status",
-          description: "Check if Gemini API key is configured and which model is active",
+          description: "Check if OpenAI API key is configured and which model is active",
           inputSchema: { type: "object", properties: {}, additionalProperties: false },
         },
         {
@@ -305,58 +358,37 @@ class NanoBanana2MCP {
   // -------------------------------------------------------------------------
 
   private extractImageParams(args: Record<string, unknown>): ImageParams {
-    const aspectRatio = (args.aspectRatio as string) || "1:1";
-    const resolution = (args.resolution as string) || "1K";
-    const thinking = (args.thinking as string) || "minimal";
+    const size = (args.size as string) || "1024x1024";
+    const quality = (args.quality as string) || "auto";
+    const outputFormat = ((args.outputFormat as string) || "png").toLowerCase();
+    const background = (args.background as string) || "auto";
     const raw = Math.round(Number(args.numberOfImages) || 1);
     const numberOfImages = Math.min(Math.max(raw, 1), MAX_NUMBER_OF_IMAGES);
     const returnInlineImage = resolveInlineImage(
       args.returnInlineImage === undefined ? undefined : Boolean(args.returnInlineImage),
     );
 
-    if (!VALID_RESOLUTIONS.has(resolution)) {
-      throw new McpError(ErrorCode.InvalidParams, `Invalid resolution "${resolution}". Use: ${[...VALID_RESOLUTIONS].join(", ")}`);
+    validateSize(size);
+    if (!VALID_QUALITY.has(quality)) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid quality "${quality}". Use: ${[...VALID_QUALITY].join(", ")}`,
+      );
     }
-    if (!VALID_THINKING.has(thinking)) {
-      throw new McpError(ErrorCode.InvalidParams, `Invalid thinking "${thinking}". Use: ${[...VALID_THINKING].join(", ")}`);
+    if (!VALID_OUTPUT_FORMATS.has(outputFormat)) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid outputFormat "${outputFormat}". Use: ${[...VALID_OUTPUT_FORMATS].join(", ")}`,
+      );
+    }
+    if (!VALID_BACKGROUNDS.has(background)) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid background "${background}". Use: ${[...VALID_BACKGROUNDS].join(", ")}`,
+      );
     }
 
-    return { aspectRatio, resolution, thinking, numberOfImages, returnInlineImage };
-  }
-
-  // -------------------------------------------------------------------------
-  // Gemini API call
-  // -------------------------------------------------------------------------
-
-  private async callGemini(
-    contents: string | Array<{ parts: Array<Record<string, unknown>> }>,
-    params: ImageParams,
-  ) {
-    const genAI = this.initGenAI();
-    const modelId = getModelId();
-    const imageModel = isImageModel(modelId);
-    const thinkingSupported = supportsThinking(modelId);
-
-    const config: Record<string, unknown> = {
-      responseModalities: ["IMAGE"],
-      ...(imageModel && {
-        imageConfig: {
-          aspectRatio: params.aspectRatio,
-          imageSize: params.resolution,
-        },
-      }),
-      ...(thinkingSupported && {
-        thinkingConfig: {
-          thinkingLevel: params.thinking,
-        },
-      }),
-    };
-
-    return genAI.models.generateContent({
-      model: modelId,
-      contents,
-      config,
-    });
+    return { size, quality, numberOfImages, outputFormat, background, returnInlineImage };
   }
 
   // -------------------------------------------------------------------------
@@ -376,7 +408,7 @@ class NanoBanana2MCP {
     suffix?: string,
   ): Promise<{ filePath: string; fileSize: number }> {
     const dir = await this.ensureOutputDir();
-    const ext = mimeToExtension(mimeType);
+    const ext = mimeType === "image/jpeg" ? ".jpg" : mimeType === "image/webp" ? ".webp" : ".png";
     const name = `${prefix}-${timestamp()}-${randomId()}${suffix || ""}${ext}`;
     const filePath = path.join(dir, name);
     const buffer = Buffer.from(base64Data, "base64");
@@ -394,13 +426,11 @@ class NanoBanana2MCP {
   ): CallToolResult {
     const content: Array<{ type: string; text?: string; data?: string; mimeType?: string }> = [];
 
-    // Text summary
     const lines = savedImages.map((img) => `${img.filePath} (${formatBytes(img.fileSize)})`);
     const target = savedImages.length === 1 ? "this image" : "the first image";
     lines.push(`Use continue_editing to refine ${target}.`);
     content.push({ type: "text", text: lines.join("\n") });
 
-    // Inline images (if enabled)
     if (returnInlineImage) {
       for (const img of savedImages) {
         content.push({
@@ -424,15 +454,21 @@ class NanoBanana2MCP {
     if (!prompt) throw new McpError(ErrorCode.InvalidParams, "prompt is required");
 
     const params = this.extractImageParams(args);
+    const openai = this.initOpenAI();
+    const modelId = getModelId();
 
-    // Make multiple API calls for numberOfImages > 1 (API doesn't support batch)
-    const allSaved: SavedImage[] = [];
-    for (let i = 0; i < params.numberOfImages; i++) {
-      const response = await this.callGemini(prompt, params);
-      const suffix = params.numberOfImages > 1 ? `-${i + 1}` : "";
-      const saved = await this.processResponseSingle(response, "generated", suffix);
-      allSaved.push(...saved);
-    }
+    const generateRequest = {
+      model: modelId,
+      prompt,
+      size: params.size,
+      quality: params.quality,
+      n: params.numberOfImages,
+      output_format: params.outputFormat,
+      background: params.background,
+    } as unknown as Parameters<typeof openai.images.generate>[0];
+    const response = await openai.images.generate(generateRequest);
+
+    const allSaved = await this.processResponse(response, "generated", params);
 
     if (allSaved.length === 0) {
       return { content: [{ type: "text", text: "No image was generated. Try rephrasing your prompt." }] };
@@ -451,34 +487,59 @@ class NanoBanana2MCP {
     const imagePath = args.imagePath as string;
     const prompt = args.prompt as string;
     const referenceImages = (args.referenceImages as string[]) || [];
+    const maskPath = args.mask as string | undefined;
 
     if (!imagePath) throw new McpError(ErrorCode.InvalidParams, "imagePath is required");
     if (!prompt) throw new McpError(ErrorCode.InvalidParams, "prompt is required");
 
-    // Validate all image paths
     const allPaths = [imagePath, ...referenceImages];
+    if (allPaths.length > MAX_REFERENCE_IMAGES) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Too many images (${allPaths.length}). Max: ${MAX_REFERENCE_IMAGES} total (main + references).`,
+      );
+    }
+
     for (const p of allPaths) {
       await validateImagePath(p);
     }
-
-    // Build parts: images first, then text prompt
-    const parts: Array<Record<string, unknown>> = [];
-    for (const p of allPaths) {
-      const data = await fs.readFile(p);
-      const mime = extensionToMime(path.extname(p).toLowerCase());
-      parts.push({
-        inlineData: {
-          data: data.toString("base64"),
-          mimeType: mime,
-        },
-      });
-    }
-    parts.push({ text: prompt });
+    if (maskPath) await validateImagePath(maskPath);
 
     const params = this.extractImageParams(args);
-    const response = await this.callGemini([{ parts }], params);
+    const openai = this.initOpenAI();
+    const modelId = getModelId();
 
-    const saved = await this.processResponseSingle(response, "edited", "");
+    const imageFiles = await Promise.all(
+      allPaths.map(async (p) => {
+        const ext = path.extname(p).toLowerCase();
+        const mime = extensionToMime(ext);
+        return await toFile(createReadStream(p), path.basename(p), { type: mime });
+      }),
+    );
+
+    const editRequest: Record<string, unknown> = {
+      model: modelId,
+      image: imageFiles,
+      prompt,
+      size: params.size,
+      quality: params.quality,
+      n: params.numberOfImages,
+      output_format: params.outputFormat,
+      background: params.background,
+    };
+
+    if (maskPath) {
+      const maskMime = extensionToMime(path.extname(maskPath).toLowerCase());
+      editRequest.mask = await toFile(createReadStream(maskPath), path.basename(maskPath), {
+        type: maskMime,
+      });
+    }
+
+    const response = await openai.images.edit(
+      editRequest as unknown as Parameters<typeof openai.images.edit>[0],
+    );
+
+    const saved = await this.processResponse(response, "edited", params);
     if (saved.length === 0) {
       return { content: [{ type: "text", text: "No edited image was produced. Try a different prompt." }] };
     }
@@ -500,7 +561,6 @@ class NanoBanana2MCP {
     }
 
     const args = request.params.arguments as Record<string, unknown>;
-    // Delegate to editImage with lastImagePath
     const editArgs = { ...args, imagePath: this.lastImagePath };
     const editRequest = {
       ...request,
@@ -515,13 +575,11 @@ class NanoBanana2MCP {
   // -------------------------------------------------------------------------
 
   private getConfigurationStatus(): CallToolResult {
-    const hasKey = !!process.env.GEMINI_API_KEY;
+    const hasKey = !!process.env.OPENAI_API_KEY;
     const modelId = getModelId();
     const lines = [
-      `API key: ${hasKey ? "configured" : "NOT configured — set GEMINI_API_KEY in MCP server env"}`,
+      `API key: ${hasKey ? "configured" : "NOT configured — set OPENAI_API_KEY in MCP server env"}`,
       `Model: ${modelId}`,
-      `Image model: ${isImageModel(modelId)}`,
-      `Thinking support: ${supportsThinking(modelId)}`,
       `Output dir: ${getOutputDir()}`,
       `Inline images: ${resolveInlineImage(undefined)}`,
     ];
@@ -560,36 +618,36 @@ class NanoBanana2MCP {
   }
 
   // -------------------------------------------------------------------------
-  // Process Gemini response → saved images
+  // Process OpenAI response → saved images
   // -------------------------------------------------------------------------
 
-  private async processResponseSingle(
-    response: Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>,
+  private async processResponse(
+    response: { data?: Array<{ b64_json?: string | null; url?: string | null }> | null },
     prefix: string,
-    suffix: string,
+    params: ImageParams,
   ): Promise<SavedImage[]> {
-    const candidates = response.candidates || [];
+    const items = response.data || [];
+    const mimeType = outputFormatToMime(params.outputFormat);
     const saved: SavedImage[] = [];
 
-    for (const candidate of candidates) {
-      const parts = candidate.content?.parts || [];
-      for (const part of parts) {
-        if (part.inlineData?.data) {
-          const mimeType = part.inlineData.mimeType || "image/png";
-          const { filePath, fileSize } = await this.saveImage(
-            part.inlineData.data,
-            mimeType,
-            prefix,
-            suffix,
-          );
-          saved.push({
-            filePath,
-            fileSize,
-            base64: part.inlineData.data,
-            mimeType,
-          });
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      let base64 = item.b64_json;
+
+      if (!base64 && item.url) {
+        const res = await fetch(item.url);
+        if (!res.ok) {
+          throw new McpError(ErrorCode.InternalError, `Failed to download image from ${item.url}`);
         }
+        const buf = Buffer.from(await res.arrayBuffer());
+        base64 = buf.toString("base64");
       }
+
+      if (!base64) continue;
+
+      const suffix = items.length > 1 ? `-${i + 1}` : "";
+      const { filePath, fileSize } = await this.saveImage(base64, mimeType, prefix, suffix);
+      saved.push({ filePath, fileSize, base64, mimeType });
     }
 
     return saved;
@@ -605,5 +663,5 @@ class NanoBanana2MCP {
   }
 }
 
-const server = new NanoBanana2MCP();
+const server = new GptImage2MCP();
 server.run().catch(console.error);
