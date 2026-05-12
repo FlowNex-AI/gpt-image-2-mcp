@@ -1,7 +1,7 @@
 ---
 name: powerpoint-images
 description: Use when creating images for PowerPoint, Keynote, or Google Slides presentations — hero slides, section dividers, accent illustrations, diagrams, or icon sets. Triggers on mentions of slides, decks, presentations, PowerPoint, Keynote, Google Slides, pitch deck, board deck, all-hands, QBR, town hall, sales deck, or "make me an image for slide X". A natural fit for Claude Cowork (knowledge workers building decks).
-allowed-tools: mcp__gpt-image-2__generate_image, mcp__gpt-image-2__edit_image, mcp__gpt-image-2__continue_editing, mcp__gpt-image-2__get_configuration_status, mcp__gpt-image-2__get_last_image_info
+allowed-tools: mcp__gpt-image-2__generate_image, mcp__gpt-image-2__edit_image, mcp__gpt-image-2__continue_editing, mcp__gpt-image-2__check_image_job, mcp__gpt-image-2__get_configuration_status, mcp__gpt-image-2__get_last_image_info
 ---
 
 # Slide Images with OpenAI gpt-image-2
@@ -53,9 +53,9 @@ When you do request text, quote it exactly and specify the font style: *"the wor
 
 1. **Confirm the slide context first.** Aspect, palette, what text will overlay it, and whether it's hero / accent / icon. If the user didn't say, ask in one line or pick a sensible default and call it out.
 2. **Build a reusable style sentence** (color palette + art style + medium). Save it in your head for the whole deck.
-3. **Generate** with `generate_image`. Default to `quality: "high"` for hero slides (worth the latency), `quality: "medium"` for accent illustrations.
-4. **Refine** with `continue_editing` — typical asks: "move the subject right to leave the left third empty", "warmer color temperature", "remove the small text in the corner".
-5. **Batch related slides.** When you need 4–8 spot illustrations for the same deck, call `generate_image` once per concept with `numberOfImages: 2` to pick the best of each pair, reusing the exact same style sentence each time.
+3. **Generate**. Call `generate_image` — it returns a `jobId` immediately. Then poll `check_image_job({ jobId })` every ~5s. For deck heroes (`quality: "high"`, 1536x1024) expect 60–120s; for accents (`quality: "medium"`, 1024x1024) expect 25–40s.
+4. **Refine** with `continue_editing` (also async + polling) — typical asks: "move the subject right to leave the left third empty", "warmer color temperature", "remove the small text in the corner".
+5. **Batch related slides.** Kick off multiple `generate_image` jobs back-to-back (each returns a jobId in <1s), then poll them in turn. Reuse the exact same style sentence every time.
 
 ## Recommended defaults for slides
 

@@ -3,11 +3,14 @@
     "gpt-image-2": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"],
+      "timeout": 300000,
       "env": {
         "OPENAI_API_KEY": "${user_config.OPENAI_API_KEY}",
         "OPENAI_IMAGE_MODEL": "${user_config.OPENAI_IMAGE_MODEL}",
         "MCP_GPT_IMAGE_2_OUTPUT_DIR": "${user_config.MCP_GPT_IMAGE_2_OUTPUT_DIR}",
-        "MCP_GPT_IMAGE_2_INLINE_IMAGE": "${user_config.MCP_GPT_IMAGE_2_INLINE_IMAGE}"
+        "MCP_GPT_IMAGE_2_INLINE_IMAGE": "${user_config.MCP_GPT_IMAGE_2_INLINE_IMAGE}",
+        "MCP_TIMEOUT": "300000",
+        "MCP_SERVER_REQUEST_TIMEOUT": "300000"
       }
     }
   }

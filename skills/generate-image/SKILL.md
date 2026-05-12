@@ -1,7 +1,7 @@
 ---
 name: generate-image
 description: Generate or edit images using OpenAI gpt-image-2. Use this skill any time the user asks to create, generate, illustrate, design, mock up, or edit an image — from product shots and diagrams to marketing visuals and slide imagery. Works in Claude Code and Claude Cowork.
-allowed-tools: mcp__gpt-image-2__generate_image, mcp__gpt-image-2__edit_image, mcp__gpt-image-2__continue_editing, mcp__gpt-image-2__get_configuration_status, mcp__gpt-image-2__get_last_image_info
+allowed-tools: mcp__gpt-image-2__generate_image, mcp__gpt-image-2__edit_image, mcp__gpt-image-2__continue_editing, mcp__gpt-image-2__check_image_job, mcp__gpt-image-2__get_configuration_status, mcp__gpt-image-2__get_last_image_info
 ---
 
 # Image Generation with OpenAI gpt-image-2
@@ -35,12 +35,27 @@ If you aren't sure the API key is configured, call `get_configuration_status`. I
 - **numberOfImages** — `1` (default). Use 2–4 to explore variations.
 - **returnInlineImage** — Consider setting to `false` in Claude Code to avoid context window overflow. The image is still saved to disk and can be viewed by the user.
 
+## Async job model (important)
+
+`generate_image`, `edit_image`, and `continue_editing` are **asynchronous**. They return a `jobId` in under a second and run the actual OpenAI call (10–180s) in the background. To get the result you MUST poll:
+
+1. Call `generate_image` (or `edit_image` / `continue_editing`). Extract `jobId` from the response.
+2. Call `check_image_job({ jobId })` every ~5 seconds.
+3. When `status: completed`, the response contains the saved file path (and inline base64 if enabled). On `status: failed`, surface the error message to the user.
+
+Do NOT spam-poll faster than every ~3 seconds. Typical wait times:
+- `quality: "low"`, 1024x1024 → ~15–25s (3–5 polls)
+- `quality: "medium"`, 1024x1024 → ~25–40s (5–8 polls)
+- `quality: "high"`, 1536x1024 or larger → ~60–180s (12–36 polls)
+
+This model removes MCP request-timeout errors entirely — every individual tool call is sub-second.
+
 ## Workflow
 
-1. **Generate**: Use `generate_image` with a well-crafted narrative prompt.
-2. **Review**: Check the saved file path in the response.
-3. **Refine**: Use `continue_editing` to make adjustments. Be specific about what to change.
-4. **Iterate**: Each `continue_editing` call builds on the previous result.
+1. **Start** the generation with `generate_image` (or `edit_image` / `continue_editing`). Grab the `jobId`.
+2. **Poll** `check_image_job` every ~5s until `completed`.
+3. **Refine**: Call `continue_editing` to make adjustments to the last result, then poll again. Be specific about what to change.
+4. **Iterate**: Each refinement is its own job; the jobIds are independent.
 
 ## Editing with References
 

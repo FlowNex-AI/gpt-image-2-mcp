@@ -29,6 +29,9 @@ const ALLOWED_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const MAX_IMAGE_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_NUMBER_OF_IMAGES = 4;
 const MAX_REFERENCE_IMAGES = 16;
+const MAX_JOBS_RETAINED = 32;
+const JOB_RETENTION_MS = 30 * 60 * 1000;
+const POLL_HINT_SECONDS = 5;
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -157,6 +160,8 @@ class GptImage2MCP {
     server;
     openai = null;
     lastImagePath = null;
+    jobs = new Map();
+    nextJobNum = 1;
     constructor() {
         this.server = new Server({ name: "gpt-image-2", version: VERSION }, { capabilities: { tools: {} } });
         this.setupHandlers();
@@ -182,7 +187,7 @@ class GptImage2MCP {
             tools: [
                 {
                     name: "generate_image",
-                    description: "Generate a NEW image from text prompt using OpenAI gpt-image-2. Use this ONLY when creating a completely new image, not when modifying an existing one.",
+                    description: "Start generating a NEW image with OpenAI gpt-image-2. Returns a jobId IMMEDIATELY (sub-second). The actual generation runs in the background (10–180s depending on size/quality). You MUST then call check_image_job(jobId) every ~5 seconds until status is \"completed\" — the result (file path, base64) is returned by check_image_job, not by this tool. Use this ONLY when creating a brand-new image, not when modifying an existing one.",
                     inputSchema: {
                         type: "object",
                         properties: {
@@ -197,7 +202,7 @@ class GptImage2MCP {
                 },
                 {
                     name: "edit_image",
-                    description: "Edit a SPECIFIC existing image file with OpenAI gpt-image-2, optionally using additional reference images. Use this when you have the exact file path of an image to modify.",
+                    description: "Start editing a SPECIFIC existing image file with OpenAI gpt-image-2, optionally using additional reference images. Returns a jobId IMMEDIATELY; call check_image_job(jobId) every ~5 seconds until status is \"completed\".",
                     inputSchema: {
                         type: "object",
                         properties: {
@@ -225,7 +230,7 @@ class GptImage2MCP {
                 },
                 {
                     name: "continue_editing",
-                    description: "Continue editing the LAST image that was generated or edited in this session, optionally using additional reference images.",
+                    description: "Start editing the LAST image that was generated or edited in this session, optionally using additional reference images. Returns a jobId IMMEDIATELY; call check_image_job(jobId) every ~5 seconds until status is \"completed\".",
                     inputSchema: {
                         type: "object",
                         properties: {
@@ -248,6 +253,20 @@ class GptImage2MCP {
                     },
                 },
                 {
+                    name: "check_image_job",
+                    description: "Poll the status of an image generation/edit job started by generate_image, edit_image, or continue_editing. Returns { status: \"pending\" } while the OpenAI call is still running, { status: \"completed\", ... } with the saved file path (and inline base64 if enabled) when ready, or { status: \"failed\", error } on error. Call this every 5–10 seconds; a single image takes 10–180s end-to-end depending on size/quality.",
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            jobId: {
+                                type: "string",
+                                description: "The jobId returned by generate_image / edit_image / continue_editing",
+                            },
+                        },
+                        required: ["jobId"],
+                    },
+                },
+                {
                     name: "get_configuration_status",
                     description: "Check if OpenAI API key is configured and which model is active",
                     inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -263,11 +282,13 @@ class GptImage2MCP {
             try {
                 switch (request.params.name) {
                     case "generate_image":
-                        return await this.generateImage(request);
+                        return this.generateImage(request);
                     case "edit_image":
-                        return await this.editImage(request);
+                        return this.editImage(request);
                     case "continue_editing":
-                        return await this.continueEditing(request);
+                        return this.continueEditing(request);
+                    case "check_image_job":
+                        return this.checkImageJob(request);
                     case "get_configuration_status":
                         return this.getConfigurationStatus();
                     case "get_last_image_info":
@@ -344,37 +365,91 @@ class GptImage2MCP {
         return { content };
     }
     // -------------------------------------------------------------------------
-    // Tools: generate_image
+    // Job management
     // -------------------------------------------------------------------------
-    async generateImage(request) {
+    createJobId() {
+        const id = `job_${String(this.nextJobNum++).padStart(4, "0")}_${randomId()}`;
+        return id;
+    }
+    pruneJobs() {
+        const now = Date.now();
+        for (const [id, job] of this.jobs) {
+            const finishedAt = job.endedAt ?? job.startedAt;
+            if (job.status !== "pending" && now - finishedAt > JOB_RETENTION_MS) {
+                this.jobs.delete(id);
+            }
+        }
+        if (this.jobs.size > MAX_JOBS_RETAINED) {
+            const sorted = [...this.jobs.entries()]
+                .filter(([, j]) => j.status !== "pending")
+                .sort((a, b) => (a[1].endedAt ?? 0) - (b[1].endedAt ?? 0));
+            const overflow = this.jobs.size - MAX_JOBS_RETAINED;
+            for (let i = 0; i < overflow && i < sorted.length; i++) {
+                this.jobs.delete(sorted[i][0]);
+            }
+        }
+    }
+    launchJob(kind, returnInlineImage, work) {
+        this.pruneJobs();
+        const id = this.createJobId();
+        const job = { status: "pending", startedAt: Date.now(), returnInlineImage, kind };
+        this.jobs.set(id, job);
+        void work()
+            .then((saved) => {
+            job.savedImages = saved;
+            job.status = "completed";
+            job.endedAt = Date.now();
+            if (saved.length > 0)
+                this.lastImagePath = saved[0].filePath;
+        })
+            .catch((err) => {
+            job.status = "failed";
+            job.endedAt = Date.now();
+            job.error = err instanceof Error ? err.message : String(err);
+        });
+        return id;
+    }
+    jobAcceptedResponse(jobId) {
+        const text = [
+            `jobId: ${jobId}`,
+            `status: pending`,
+            `Next: call check_image_job with jobId="${jobId}" every ~${POLL_HINT_SECONDS} seconds until status is "completed" or "failed". Typical end-to-end latency: 10–180s.`,
+        ].join("\n");
+        return { content: [{ type: "text", text }] };
+    }
+    // -------------------------------------------------------------------------
+    // Tools: generate_image (async)
+    // -------------------------------------------------------------------------
+    generateImage(request) {
         const args = request.params.arguments;
         const prompt = args.prompt;
         if (!prompt)
             throw new McpError(ErrorCode.InvalidParams, "prompt is required");
         const params = this.extractImageParams(args);
-        const openai = this.initOpenAI();
+        // Validate API key up-front so the user gets a fast error rather than a
+        // jobId that immediately fails.
+        this.initOpenAI();
         const modelId = getModelId();
-        const generateRequest = {
-            model: modelId,
-            prompt,
-            size: params.size,
-            quality: params.quality,
-            n: params.numberOfImages,
-            output_format: params.outputFormat,
-            background: params.background,
-        };
-        const response = await openai.images.generate(generateRequest);
-        const allSaved = await this.processResponse(response, "generated", params);
-        if (allSaved.length === 0) {
-            return { content: [{ type: "text", text: "No image was generated. Try rephrasing your prompt." }] };
-        }
-        this.lastImagePath = allSaved[0].filePath;
-        return this.buildResponse(allSaved, params.returnInlineImage);
+        const jobId = this.launchJob("generated", params.returnInlineImage, async () => {
+            const openai = this.initOpenAI();
+            const generateRequest = {
+                model: modelId,
+                prompt,
+                size: params.size,
+                quality: params.quality,
+                n: params.numberOfImages,
+                output_format: params.outputFormat,
+                background: params.background,
+            };
+            const response = await openai.images.generate(generateRequest);
+            return this.processResponse(response, "generated", params);
+        });
+        return this.jobAcceptedResponse(jobId);
     }
     // -------------------------------------------------------------------------
-    // Tools: edit_image
+    // Tools: edit_image (async)
     // -------------------------------------------------------------------------
-    async editImage(request) {
+    editImage(request) {
         const args = request.params.arguments;
         const imagePath = args.imagePath;
         const prompt = args.prompt;
@@ -388,47 +463,48 @@ class GptImage2MCP {
         if (allPaths.length > MAX_REFERENCE_IMAGES) {
             throw new McpError(ErrorCode.InvalidParams, `Too many images (${allPaths.length}). Max: ${MAX_REFERENCE_IMAGES} total (main + references).`);
         }
-        for (const p of allPaths) {
-            await validateImagePath(p);
-        }
-        if (maskPath)
-            await validateImagePath(maskPath);
         const params = this.extractImageParams(args);
-        const openai = this.initOpenAI();
+        // Up-front API-key check; path validation runs inside the job (since it's
+        // async I/O) but we still throw fast for obvious errors.
+        this.initOpenAI();
         const modelId = getModelId();
-        const imageFiles = await Promise.all(allPaths.map(async (p) => {
-            const ext = path.extname(p).toLowerCase();
-            const mime = extensionToMime(ext);
-            return await toFile(createReadStream(p), path.basename(p), { type: mime });
-        }));
-        const editRequest = {
-            model: modelId,
-            image: imageFiles,
-            prompt,
-            size: params.size,
-            quality: params.quality,
-            n: params.numberOfImages,
-            output_format: params.outputFormat,
-            background: params.background,
-        };
-        if (maskPath) {
-            const maskMime = extensionToMime(path.extname(maskPath).toLowerCase());
-            editRequest.mask = await toFile(createReadStream(maskPath), path.basename(maskPath), {
-                type: maskMime,
-            });
-        }
-        const response = await openai.images.edit(editRequest);
-        const saved = await this.processResponse(response, "edited", params);
-        if (saved.length === 0) {
-            return { content: [{ type: "text", text: "No edited image was produced. Try a different prompt." }] };
-        }
-        this.lastImagePath = saved[0].filePath;
-        return this.buildResponse(saved, params.returnInlineImage);
+        const jobId = this.launchJob("edited", params.returnInlineImage, async () => {
+            for (const p of allPaths) {
+                await validateImagePath(p);
+            }
+            if (maskPath)
+                await validateImagePath(maskPath);
+            const openai = this.initOpenAI();
+            const imageFiles = await Promise.all(allPaths.map(async (p) => {
+                const ext = path.extname(p).toLowerCase();
+                const mime = extensionToMime(ext);
+                return await toFile(createReadStream(p), path.basename(p), { type: mime });
+            }));
+            const editRequest = {
+                model: modelId,
+                image: imageFiles,
+                prompt,
+                size: params.size,
+                quality: params.quality,
+                n: params.numberOfImages,
+                output_format: params.outputFormat,
+                background: params.background,
+            };
+            if (maskPath) {
+                const maskMime = extensionToMime(path.extname(maskPath).toLowerCase());
+                editRequest.mask = await toFile(createReadStream(maskPath), path.basename(maskPath), {
+                    type: maskMime,
+                });
+            }
+            const response = await openai.images.edit(editRequest);
+            return this.processResponse(response, "edited", params);
+        });
+        return this.jobAcceptedResponse(jobId);
     }
     // -------------------------------------------------------------------------
-    // Tools: continue_editing
+    // Tools: continue_editing (async)
     // -------------------------------------------------------------------------
-    async continueEditing(request) {
+    continueEditing(request) {
         if (!this.lastImagePath) {
             throw new McpError(ErrorCode.InvalidRequest, "No previous image in this session. Use generate_image or edit_image first.");
         }
@@ -439,6 +515,72 @@ class GptImage2MCP {
             params: { ...request.params, arguments: editArgs },
         };
         return this.editImage(editRequest);
+    }
+    // -------------------------------------------------------------------------
+    // Tools: check_image_job
+    // -------------------------------------------------------------------------
+    checkImageJob(request) {
+        const args = request.params.arguments;
+        const jobId = args.jobId;
+        if (!jobId)
+            throw new McpError(ErrorCode.InvalidParams, "jobId is required");
+        const job = this.jobs.get(jobId);
+        if (!job) {
+            throw new McpError(ErrorCode.InvalidParams, `Unknown jobId "${jobId}". Jobs are kept in memory for ${Math.floor(JOB_RETENTION_MS / 60000)} minutes after completion.`);
+        }
+        const elapsed = ((job.endedAt ?? Date.now()) - job.startedAt) / 1000;
+        if (job.status === "pending") {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: [
+                            `jobId: ${jobId}`,
+                            `status: pending`,
+                            `elapsed: ${elapsed.toFixed(1)}s`,
+                            `Call check_image_job again in ${POLL_HINT_SECONDS}s.`,
+                        ].join("\n"),
+                    },
+                ],
+            };
+        }
+        if (job.status === "failed") {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: [
+                            `jobId: ${jobId}`,
+                            `status: failed`,
+                            `elapsed: ${elapsed.toFixed(1)}s`,
+                            `error: ${job.error ?? "unknown"}`,
+                        ].join("\n"),
+                    },
+                ],
+                isError: true,
+            };
+        }
+        const saved = job.savedImages ?? [];
+        if (saved.length === 0) {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `jobId: ${jobId}\nstatus: completed\nelapsed: ${elapsed.toFixed(1)}s\nNo image was produced. Try rephrasing your prompt.`,
+                    },
+                ],
+            };
+        }
+        const result = this.buildResponse(saved, job.returnInlineImage);
+        const header = `jobId: ${jobId}\nstatus: completed\nelapsed: ${elapsed.toFixed(1)}s\n`;
+        const first = result.content[0];
+        if (first?.type === "text") {
+            first.text = header + (first.text ?? "");
+        }
+        else {
+            result.content.unshift({ type: "text", text: header.trimEnd() });
+        }
+        return result;
     }
     // -------------------------------------------------------------------------
     // Tools: get_configuration_status

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- **Async job model** for image generation. `generate_image`, `edit_image`, and `continue_editing` now return a `jobId` in <1s and run the OpenAI call in the background. A new `check_image_job` tool polls the status. End-to-end this eliminates the MCP `-32001 Request timed out` error that fired on long (>60s) `quality: "high"` generations.
+- `.mcp.json` now declares `timeout: 300000` plus `MCP_TIMEOUT` / `MCP_SERVER_REQUEST_TIMEOUT` env hints as a safety net for clients that don't honor the per-server `timeout` field.
+
 ## [0.1.2] - 2026-05-12
 
 ### Added

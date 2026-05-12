@@ -98,9 +98,11 @@ The tools will be available after restart.
 
 ## Tools
 
+All generation/edit tools are **asynchronous**: they return a `jobId` in <1s and run the OpenAI call in the background. Poll `check_image_job(jobId)` every ~5s for the result. This avoids MCP `-32001 Request timed out` errors when generations take longer than 60s (e.g. `quality: "high"` at 2K can take 60–180s).
+
 ### `generate_image`
 
-Generate a new image from a text prompt.
+Start a new image generation from a text prompt. Returns a `jobId` immediately.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -114,7 +116,7 @@ Generate a new image from a text prompt.
 
 ### `edit_image`
 
-Edit an existing image file. Same parameters as `generate_image`, plus:
+Start editing an existing image file. Returns a `jobId` immediately. Same parameters as `generate_image`, plus:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -124,7 +126,17 @@ Edit an existing image file. Same parameters as `generate_image`, plus:
 
 ### `continue_editing`
 
-Continue editing the last generated/edited image. Same parameters as `edit_image` minus `imagePath` (uses the last image automatically).
+Continue editing the last generated/edited image (also async). Same parameters as `edit_image` minus `imagePath`.
+
+### `check_image_job`
+
+Poll the status of a job started by `generate_image`, `edit_image`, or `continue_editing`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `jobId` | string | (required) The jobId returned by the start tool |
+
+Returns `status: pending` (poll again in ~5s), `status: completed` with the saved file path + optional inline base64, or `status: failed` with an error message. Jobs are retained for 30 minutes after completion.
 
 ### `get_configuration_status`
 
