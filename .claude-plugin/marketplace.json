@@ -4,7 +4,7 @@
   "owner": { "name": "FlowNex AI", "url": "https://flownexai.com" },
   "plugins": [{
     "name": "gpt-image-2",
-    "source": { "source": "github", "repo": "FlowNex-AI/gpt-image-2-mcp" },
+    "source": { "source": "npm", "package": "@flownex-ai/mcp-gpt-image-2" },
     "description": "Image generation with OpenAI gpt-image-2 via MCP",
     "version": "0.1.0"
   }]

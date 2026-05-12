@@ -26,26 +26,28 @@ Get one from [OpenAI Platform](https://platform.openai.com/api-keys). OpenAI gat
 ### A) In Claude Code (recommended)
 
 ```bash
-# 1. Add the marketplace (pulls .claude-plugin/marketplace.json from this repo)
+# 1. Add the marketplace
 claude plugin marketplace add FlowNex-AI/gpt-image-2-mcp
 
-# 2. Install the plugin from that marketplace
+# 2. Install (pulls @flownex-ai/mcp-gpt-image-2 from npm)
 claude plugin install gpt-image-2@mcp-gpt-image-2-plugins
 ```
 
-The plugin prompts for your `OPENAI_API_KEY` on install (declared via `userConfig` in `plugin.json`, stored in your system keychain). The bundled MCP server (`dist/index.js`) runs from the cloned repo — no npm publish needed.
+The plugin prompts for your `OPENAI_API_KEY` on install (declared via `userConfig` in `plugin.json`, stored in the system keychain).
 
 Alternative: inside Claude Code, run `/plugin` for an interactive picker.
 
 ### B) In Claude Cowork
 
-Cowork reads the same plugin format:
+Cowork installs plugins from npm. The package is published as **`@flownex-ai/mcp-gpt-image-2`**.
 
-1. Open Cowork → **Browse plugins** → **Upload custom plugin**, and point it at this repo (or its zipped release). Cowork picks up `.claude-plugin/plugin.json`, the bundled MCP server in `.mcp.json`, and the skills under `skills/`.
-2. When prompted, paste your `OPENAI_API_KEY` (the same `userConfig` prompt as in Code).
-3. The `generate-image` and `powerpoint-images` skills become available — try *"make me a hero image for slide 1 of my QBR deck"*.
+1. Open the Claude desktop app → **Cowork** tab.
+2. Sidebar → **Customize** → **Browse plugins** → **Add custom plugin** (or **Install from npm**).
+3. Paste the package name: `@flownex-ai/mcp-gpt-image-2`
+4. When prompted, paste your `OPENAI_API_KEY` (driven by `userConfig` in `plugin.json`, stored in the system keychain).
+5. The `generate-image` and `powerpoint-images` skills become available — try *"make me a hero image for slide 1 of my QBR deck"*.
 
-For org-wide MDM deployments, drop this repo into the org-plugins directory documented in the Cowork enterprise admin guide.
+For org-wide MDM deployments, place the unpacked plugin folder under `/Library/Application Support/Claude/org-plugins/` (macOS) or `C:\ProgramData\Claude\org-plugins\` (Windows) and allowlist the MCP server in your MDM policy.
 
 ### C) Manual MCP config (skip the plugin)
 
