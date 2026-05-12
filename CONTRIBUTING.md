@@ -1,10 +1,10 @@
-# Contributing to nano-banana-2-mcp
+# Contributing to mcp-gpt-image-2
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/daveremy/nano-banana-2-mcp.git
-cd nano-banana-2-mcp
+git clone https://github.com/FlowNex-AI/gpt-image-2-mcp.git
+cd gpt-image-2-mcp
 npm install
 ```
 
@@ -20,10 +20,13 @@ npm install
 ## Running Locally
 
 1. Build: `npm run build`
-2. Set your API key: `export GEMINI_API_KEY=your-key`
-3. Start: `npm start`
+2. Set your API key: `export OPENAI_API_KEY=sk-...`
+3. (Optional) Override the model: `export OPENAI_IMAGE_MODEL=gpt-image-2-2026-04-21`
+4. Start: `npm start`
 
 Or use `npm run dev` to run directly from source during development.
+
+Note: OpenAI gates the gpt-image family behind organization verification. If you get a 403 on first call, complete verification at https://platform.openai.com/settings/organization/general.
 
 ## Testing
 
@@ -32,6 +35,26 @@ npm test
 ```
 
 Tests use Node's built-in test runner. Add new tests in `test/` with the `.test.ts` extension.
+
+### End-to-end smoke test
+
+To verify the full stdio flow against the real OpenAI API, you can drive the compiled server manually:
+
+```bash
+npm run build
+OPENAI_API_KEY=sk-... MCP_GPT_IMAGE_2_OUTPUT_DIR=/tmp/img-test \
+  node -e '
+    import("child_process").then(({spawn}) => {
+      const c = spawn("node", ["dist/index.js"], { stdio: ["pipe","pipe","inherit"] });
+      const send = (id, method, params) => c.stdin.write(JSON.stringify({jsonrpc:"2.0",id,method,params})+"\n");
+      c.stdout.on("data", d => process.stdout.write(d));
+      send(1, "initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" }});
+      send(2, "tools/call", { name: "generate_image", arguments: { prompt: "test", quality: "low", returnInlineImage: false }});
+    });
+  '
+```
+
+This will incur a real OpenAI API charge.
 
 ## Submitting Changes
 

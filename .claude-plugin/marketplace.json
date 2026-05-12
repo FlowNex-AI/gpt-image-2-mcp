@@ -1,10 +1,10 @@
 {
-  "name": "nano-banana-2-plugins",
-  "owner": { "name": "daveremy" },
+  "name": "mcp-gpt-image-2-plugins",
+  "owner": { "name": "FlowNex AI", "url": "https://flownexai.com" },
   "plugins": [{
-    "name": "nano-banana-2",
-    "source": { "source": "npm", "package": "nano-banana-2-mcp" },
-    "description": "Image generation with Google Gemini Nano Banana 2 via MCP",
-    "version": "0.1.1"
+    "name": "gpt-image-2",
+    "source": { "source": "npm", "package": "mcp-gpt-image-2" },
+    "description": "Image generation with OpenAI gpt-image-2 via MCP",
+    "version": "0.1.0"
   }]
 }

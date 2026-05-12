@@ -1,14 +1,14 @@
 {
-  "name": "nano-banana-2",
-  "description": "Image generation with Google Gemini Nano Banana 2 via MCP",
-  "version": "0.1.1",
-  "author": { "name": "daveremy" },
-  "homepage": "https://github.com/daveremy/nano-banana-2-mcp",
-  "repository": "https://github.com/daveremy/nano-banana-2-mcp",
+  "name": "gpt-image-2",
+  "description": "Image generation with OpenAI gpt-image-2 via MCP",
+  "version": "0.1.0",
+  "author": { "name": "FlowNex AI", "url": "https://flownexai.com" },
+  "homepage": "https://github.com/FlowNex-AI/gpt-image-2-mcp",
+  "repository": "https://github.com/FlowNex-AI/gpt-image-2-mcp",
   "mcpServers": {
-    "nano-banana-2": {
+    "gpt-image-2": {
       "command": "npx",
-      "args": ["-y", "nano-banana-2-mcp@0.1.1"]
+      "args": ["-y", "mcp-gpt-image-2@0.1.0"]
     }
   }
 }

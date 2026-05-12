@@ -1,40 +1,41 @@
 ---
 name: generate-image
-description: Generate images using nano-banana-2 MCP tools with best-practice prompting. Use this skill when the user asks to create, generate, or edit images.
-allowed-tools: mcp__nano-banana-2__generate_image, mcp__nano-banana-2__edit_image, mcp__nano-banana-2__continue_editing, mcp__nano-banana-2__get_configuration_status, mcp__nano-banana-2__get_last_image_info
+description: Generate images using mcp-gpt-image-2 (OpenAI gpt-image-2) MCP tools with best-practice prompting. Use this skill when the user asks to create, generate, or edit images.
+allowed-tools: mcp__gpt-image-2__generate_image, mcp__gpt-image-2__edit_image, mcp__gpt-image-2__continue_editing, mcp__gpt-image-2__get_configuration_status, mcp__gpt-image-2__get_last_image_info
 ---
 
-# Image Generation with Nano Banana 2
+# Image Generation with OpenAI gpt-image-2
 
-Use the `generate_image`, `edit_image`, and `continue_editing` MCP tools from the `nano-banana-2` server.
+Use the `generate_image`, `edit_image`, and `continue_editing` MCP tools from the `gpt-image-2` server (powered by OpenAI's `gpt-image-2` model).
 
 ## First-Time Setup
 
 Before generating images, verify the API key is configured:
 
-1. Call `get_configuration_status` to check if `GEMINI_API_KEY` is set.
+1. Call `get_configuration_status` to check if `OPENAI_API_KEY` is set.
 2. If the key is missing, instruct the user to add it to their MCP server environment configuration:
-   - In Claude Code settings or `.claude/settings.json`, add `GEMINI_API_KEY` to the server's `env` block.
-   - The key can be obtained from [Google AI Studio](https://aistudio.google.com/apikey).
+   - In Claude Code settings or `.claude/settings.json`, add `OPENAI_API_KEY` to the server's `env` block.
+   - The key can be obtained from [OpenAI Platform](https://platform.openai.com/api-keys).
+   - Note: OpenAI gates the gpt-image family behind organization verification — complete it in the developer console if you get a 403.
 
 ## Prompting Best Practices
 
-**Write narrative paragraphs, NOT comma-separated keyword lists.** Narrative prompts achieve ~94% coherence vs ~61% for keyword lists.
+**Write narrative paragraphs, not comma-separated keyword lists.** gpt-image-2 is autoregressive and follows narrative instructions well.
 
 1. **Start with image type**: "Create an educational diagram showing...", "Generate a photorealistic photograph of...", "Design a flat-style icon depicting..."
-2. **Keep text in images short** (<25 characters). Quote text exactly and describe font style.
+2. **Text in images works very well** — gpt-image-2 has ~99% text accuracy including CJK. Quote text exactly and describe font/placement.
 3. **Specify layout explicitly**: side-by-side, top-to-bottom steps, centered with border, etc.
 4. **Skip quality boosters** like "4k masterpiece", "highly detailed", "award-winning" — they add noise, not quality.
 5. **Be specific about what you want**, not what you don't want. Positive descriptions work better than negations.
 
-## Defaults
+## Parameters
 
-- **resolution**: `"1K"` — good balance of quality and speed. Use `"2K"` or `"4K"` for print or detail-heavy images.
-- **aspectRatio**: `"1:1"` — change to `"16:9"` for landscapes/banners, `"9:16"` for mobile/portrait.
-- **thinking**: `"minimal"` — use `"high"` for complex scenes with spatial relationships or text rendering.
-- **returnInlineImage**: Consider setting to `false` in Claude Code to avoid context window overflow. The image is still saved to disk and can be viewed by the user.
-- **outputMimeType**: `"image/png"` for quality, `"image/jpeg"` for smaller files.
-- **numberOfImages**: `1` — use 2-4 when exploring variations.
+- **size** — `"1024x1024"` (default, square), `"1536x1024"` (landscape), `"1024x1536"` (portrait), `"2048x2048"` (square hi-res), `"auto"`, or a custom `"WxH"` (edges multiples of 16, max edge 3840, total pixels 655,360–8,294,400, ratio ≤ 3:1).
+- **quality** — `"low"`, `"medium"`, `"high"`, `"auto"` (default). Higher quality increases latency and cost.
+- **outputFormat** — `"png"` (default, lossless), `"jpeg"` (smaller, faster), `"webp"`.
+- **background** — `"auto"` (default) or `"opaque"`. Transparent backgrounds are not supported by gpt-image-2.
+- **numberOfImages** — `1` (default). Use 2–4 to explore variations.
+- **returnInlineImage** — Consider setting to `false` in Claude Code to avoid context window overflow. The image is still saved to disk and can be viewed by the user.
 
 ## Workflow
 
@@ -43,11 +44,15 @@ Before generating images, verify the API key is configured:
 3. **Refine**: Use `continue_editing` to make adjustments. Be specific about what to change.
 4. **Iterate**: Each `continue_editing` call builds on the previous result.
 
+## Editing with References
+
+`edit_image` and `continue_editing` accept a main image plus optional `referenceImages` (up to 16 total). gpt-image-2 will fuse them per the prompt — useful for product composites, character consistency, or applying a style from one image to another. An optional `mask` (PNG with transparent pixels marking the editable area) can confine changes to a region.
+
 ## Style Guidance
 
-- **Diagrams**: Specify colors, label positions, arrow directions. Use `thinking: "high"` for complex layouts.
+- **Diagrams**: Specify colors, label positions, arrow directions. Use `quality: "high"` for complex layouts.
 - **Illustrations**: Describe art style (flat, watercolor, line art), mood, and lighting.
-- **Infographics**: Use numbered lists cautiously (>8 sequential items are unreliable). Numbers-only approach works best for long lists.
+- **Infographics**: Long numbered lists (>8 items) can still be unreliable; consider splitting.
 - **Photos**: Describe camera angle, lighting conditions, depth of field, and subject positioning.
 
 ## Context Window Management
