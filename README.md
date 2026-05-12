@@ -26,10 +26,18 @@ Get one from [OpenAI Platform](https://platform.openai.com/api-keys). OpenAI gat
 **Via Claude Code plugin (recommended):**
 
 ```bash
-claude plugin add mcp-gpt-image-2
+# 1. Add the marketplace (pulls .claude-plugin/marketplace.json from this repo)
+claude plugin marketplace add FlowNex-AI/gpt-image-2-mcp
+
+# 2. Install the plugin from that marketplace
+claude plugin install gpt-image-2@mcp-gpt-image-2-plugins
 ```
 
-**Or manually via npx** — add to your Claude Code MCP settings:
+Then set `OPENAI_API_KEY` in the MCP server's `env` block in your Claude Code settings (the plugin manifest already wires `npx -y mcp-gpt-image-2` as the command).
+
+Alternative: inside Claude Code, run `/plugin` for an interactive picker.
+
+**Or manually via npx** — skip the plugin and add to your Claude Code MCP settings directly:
 
 ```json
 {
@@ -134,7 +142,17 @@ The server validates these before calling the API.
 
 ## Claude Code Plugin
 
-This repo includes a Claude Code plugin with a `generate-image` skill that provides best-practice prompting guidance. Install via `claude plugin add mcp-gpt-image-2` or add the repo path to your Claude Code plugins config.
+This repo includes a Claude Code plugin with two skills:
+
+- `generate-image` — best-practice prompting for general image generation
+- `powerpoint-images` — guidance tailored to PowerPoint / Keynote / Google Slides decks
+
+Install with:
+
+```bash
+claude plugin marketplace add FlowNex-AI/gpt-image-2-mcp
+claude plugin install gpt-image-2@mcp-gpt-image-2-plugins
+```
 
 ## Contributing
 
