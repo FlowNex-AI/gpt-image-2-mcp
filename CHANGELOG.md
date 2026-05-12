@@ -21,7 +21,7 @@ Initial release of `mcp-gpt-image-2`. This is a fork of [daveremy/nano-banana-2-
 - Renamed env vars `NANO_BANANA_*` → `MCP_GPT_IMAGE_2_*` (`OUTPUT_DIR`, `INLINE_IMAGE`) and `NANO_BANANA_MODEL` → `OPENAI_IMAGE_MODEL`
 - Replaced Gemini-specific params (`resolution` 1K/2K/4K, `aspectRatio`, `thinking` minimal/high) with OpenAI-native `size` + `quality`
 - Renamed server, plugin, and tool namespace from `nano-banana-2` → `gpt-image-2`
-- Renamed npm package from `nano-banana-2-mcp` → `mcp-gpt-image-2`
+- Renamed npm package from `nano-banana-2-mcp` → `@flownex-ai/mcp-gpt-image-2` (scoped under the FlowNex AI npm org)
 
 ### Verified
 - End-to-end smoke test against the real OpenAI API: `generate_image` (1024x1024 and custom 1280x720), `edit_image` chained on a generated image, and `get_configuration_status` all return valid PNGs / expected responses.

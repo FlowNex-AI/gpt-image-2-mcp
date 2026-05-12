@@ -33,7 +33,7 @@ claude plugin marketplace add FlowNex-AI/gpt-image-2-mcp
 claude plugin install gpt-image-2@mcp-gpt-image-2-plugins
 ```
 
-Then set `OPENAI_API_KEY` in the MCP server's `env` block in your Claude Code settings (the plugin manifest already wires `npx -y mcp-gpt-image-2` as the command).
+Then set `OPENAI_API_KEY` in the MCP server's `env` block in your Claude Code settings (the plugin manifest runs the bundled `dist/index.js` from the cloned repo — no npm publish needed).
 
 Alternative: inside Claude Code, run `/plugin` for an interactive picker.
 
@@ -44,7 +44,7 @@ Alternative: inside Claude Code, run `/plugin` for an interactive picker.
   "mcpServers": {
     "gpt-image-2": {
       "command": "npx",
-      "args": ["-y", "mcp-gpt-image-2"],
+      "args": ["-y", "@flownex-ai/mcp-gpt-image-2"],
       "env": {
         "OPENAI_API_KEY": "your-api-key-here"
       }
