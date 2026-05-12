@@ -2,12 +2,22 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "gpt-image-2",
   "description": "Image generation with OpenAI gpt-image-2 — works in Claude Code and Claude Cowork",
-  "version": "0.1.0",
-  "author": { "name": "FlowNex AI", "url": "https://flownexai.com" },
+  "version": "0.1.2",
+  "author": {
+    "name": "FlowNex AI",
+    "url": "https://flownexai.com"
+  },
   "homepage": "https://github.com/FlowNex-AI/gpt-image-2-mcp",
   "repository": "https://github.com/FlowNex-AI/gpt-image-2-mcp",
   "license": "MIT",
-  "keywords": ["openai", "gpt-image-2", "image-generation", "mcp", "cowork", "claude-code"],
+  "keywords": [
+    "openai",
+    "gpt-image-2",
+    "image-generation",
+    "mcp",
+    "cowork",
+    "claude-code"
+  ],
   "userConfig": {
     "OPENAI_API_KEY": {
       "type": "string",

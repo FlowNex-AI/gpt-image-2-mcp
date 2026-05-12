@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-12
+
 ### Added
 - **Claude Cowork compatibility**: plugin now ships an `.mcp.json` at the repo root (Cowork convention) and a `userConfig` block in `plugin.json` that prompts for `OPENAI_API_KEY` at install time and stores it in the system keychain. Skills carry triggers for knowledge-work contexts (decks, QBR, board, all-hands).
 
