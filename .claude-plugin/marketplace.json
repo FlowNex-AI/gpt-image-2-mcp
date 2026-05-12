@@ -1,5 +1,6 @@
 {
   "name": "mcp-gpt-image-2-plugins",
+  "description": "FlowNex AI plugins for Claude Code and Claude Cowork — image generation, presentation imagery, and more.",
   "owner": { "name": "FlowNex AI", "url": "https://flownexai.com" },
   "plugins": [{
     "name": "gpt-image-2",

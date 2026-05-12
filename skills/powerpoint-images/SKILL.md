@@ -1,6 +1,6 @@
 ---
 name: powerpoint-images
-description: Use when creating images for PowerPoint, Keynote, or Google Slides presentations — hero slides, section dividers, accent illustrations, diagrams, or icon sets. Triggers on mentions of slides, decks, presentations, PowerPoint, keynote, pitch deck, or "make me an image for slide X".
+description: Use when creating images for PowerPoint, Keynote, or Google Slides presentations — hero slides, section dividers, accent illustrations, diagrams, or icon sets. Triggers on mentions of slides, decks, presentations, PowerPoint, Keynote, Google Slides, pitch deck, board deck, all-hands, QBR, town hall, sales deck, or "make me an image for slide X". A natural fit for Claude Cowork (knowledge workers building decks).
 allowed-tools: mcp__gpt-image-2__generate_image, mcp__gpt-image-2__edit_image, mcp__gpt-image-2__continue_editing, mcp__gpt-image-2__get_configuration_status, mcp__gpt-image-2__get_last_image_info
 ---
 
@@ -75,4 +75,4 @@ For spot illustrations / icons that will be placed inside a layout, switch `size
 
 ## Context Window Management
 
-Always set `returnInlineImage: false` when generating multiple deck images in one session — base64 of a 1536x1024 PNG can be ~1.5 MB and will fill the context fast. The file path is enough for the user to drop the image into their slide tool.
+Always set `returnInlineImage: false` when generating multiple deck images in one session — base64 of a 1536x1024 PNG can be ~1.5 MB and will fill the context fast. The file path is enough for the user to drop the image into their slide tool. (In Cowork, you can also tell the user the saved path and let them drag the file into the PowerPoint/Keynote/Slides window.)

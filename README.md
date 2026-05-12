@@ -1,6 +1,6 @@
 # mcp-gpt-image-2
 
-MCP server for **OpenAI's `gpt-image-2`** image generation model.
+MCP server for **OpenAI's `gpt-image-2`** image generation model. Distributed as a Claude plugin that works in **Claude Code** and **Claude Cowork**.
 
 A fork of [daveremy/nano-banana-2-mcp](https://github.com/daveremy/nano-banana-2-mcp) (originally based on [ConechoAI/Nano-Banana-MCP](https://github.com/ConechoAI/Nano-Banana-MCP)), rewritten to target OpenAI's gpt-image-2 instead of Google Gemini.
 
@@ -23,7 +23,7 @@ Get one from [OpenAI Platform](https://platform.openai.com/api-keys). OpenAI gat
 
 ### 2. Install
 
-**Via Claude Code plugin (recommended):**
+### A) In Claude Code (recommended)
 
 ```bash
 # 1. Add the marketplace (pulls .claude-plugin/marketplace.json from this repo)
@@ -33,11 +33,23 @@ claude plugin marketplace add FlowNex-AI/gpt-image-2-mcp
 claude plugin install gpt-image-2@mcp-gpt-image-2-plugins
 ```
 
-Then set `OPENAI_API_KEY` in the MCP server's `env` block in your Claude Code settings (the plugin manifest runs the bundled `dist/index.js` from the cloned repo — no npm publish needed).
+The plugin prompts for your `OPENAI_API_KEY` on install (declared via `userConfig` in `plugin.json`, stored in your system keychain). The bundled MCP server (`dist/index.js`) runs from the cloned repo — no npm publish needed.
 
 Alternative: inside Claude Code, run `/plugin` for an interactive picker.
 
-**Or manually via npx** — skip the plugin and add to your Claude Code MCP settings directly:
+### B) In Claude Cowork
+
+Cowork reads the same plugin format:
+
+1. Open Cowork → **Browse plugins** → **Upload custom plugin**, and point it at this repo (or its zipped release). Cowork picks up `.claude-plugin/plugin.json`, the bundled MCP server in `.mcp.json`, and the skills under `skills/`.
+2. When prompted, paste your `OPENAI_API_KEY` (the same `userConfig` prompt as in Code).
+3. The `generate-image` and `powerpoint-images` skills become available — try *"make me a hero image for slide 1 of my QBR deck"*.
+
+For org-wide MDM deployments, drop this repo into the org-plugins directory documented in the Cowork enterprise admin guide.
+
+### C) Manual MCP config (skip the plugin)
+
+If you prefer to wire the MCP server directly into Claude Code, Cowork, or any MCP-compatible client (Cursor, Zed, etc.), add this to your MCP config:
 
 ```json
 {
@@ -53,7 +65,7 @@ Alternative: inside Claude Code, run `/plugin` for an interactive picker.
 }
 ```
 
-**Or from source** for development:
+### D) From source (development)
 
 ```bash
 git clone https://github.com/FlowNex-AI/gpt-image-2-mcp.git
@@ -140,19 +152,17 @@ When using a custom `WxH` size, gpt-image-2 requires:
 
 The server validates these before calling the API.
 
-## Claude Code Plugin
+## Plugin (Claude Code + Cowork)
 
-This repo includes a Claude Code plugin with two skills:
+This repo includes a unified Claude plugin that works in both **Claude Code** and **Claude Cowork** (same `.claude-plugin/plugin.json` schema). It ships:
 
-- `generate-image` — best-practice prompting for general image generation
-- `powerpoint-images` — guidance tailored to PowerPoint / Keynote / Google Slides decks
+- An MCP server (`.mcp.json` declares the `gpt-image-2` server, bundled `dist/index.js`)
+- A `userConfig` block that prompts for `OPENAI_API_KEY` on install (stored in the system keychain, not plain text)
+- Two skills:
+  - `generate-image` — best-practice prompting for general image generation
+  - `powerpoint-images` — guidance tailored to PowerPoint / Keynote / Google Slides decks (a natural fit for Cowork knowledge workers)
 
-Install with:
-
-```bash
-claude plugin marketplace add FlowNex-AI/gpt-image-2-mcp
-claude plugin install gpt-image-2@mcp-gpt-image-2-plugins
-```
+See the install instructions above for both Claude Code and Cowork.
 
 ## Contributing
 

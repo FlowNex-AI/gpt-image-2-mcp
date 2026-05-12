@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- **Claude Cowork compatibility**: plugin now ships an `.mcp.json` at the repo root (Cowork convention) and a `userConfig` block in `plugin.json` that prompts for `OPENAI_API_KEY` at install time and stores it in the system keychain. Skills carry triggers for knowledge-work contexts (decks, QBR, board, all-hands).
+
+### Changed
+- `plugin.json` no longer inlines `mcpServers`; the MCP server is declared in `.mcp.json` so both Claude Code and Cowork pick it up via auto-discovery.
+- `generate-image` skill description broadened to cover knowledge-work tasks; Claude-Code-specific wording removed.
+
 ## [0.1.0] - 2026-05-12
 
 Initial release of `mcp-gpt-image-2`. This is a fork of [daveremy/nano-banana-2-mcp](https://github.com/daveremy/nano-banana-2-mcp) (Gemini Nano Banana 2) rewritten to target OpenAI's `gpt-image-2` model.

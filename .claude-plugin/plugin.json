@@ -1,14 +1,40 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "gpt-image-2",
-  "description": "Image generation with OpenAI gpt-image-2 via MCP",
+  "description": "Image generation with OpenAI gpt-image-2 — works in Claude Code and Claude Cowork",
   "version": "0.1.0",
   "author": { "name": "FlowNex AI", "url": "https://flownexai.com" },
   "homepage": "https://github.com/FlowNex-AI/gpt-image-2-mcp",
   "repository": "https://github.com/FlowNex-AI/gpt-image-2-mcp",
-  "mcpServers": {
-    "gpt-image-2": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"]
+  "license": "MIT",
+  "keywords": ["openai", "gpt-image-2", "image-generation", "mcp", "cowork", "claude-code"],
+  "userConfig": {
+    "OPENAI_API_KEY": {
+      "type": "string",
+      "title": "OpenAI API key",
+      "description": "OpenAI API key with gpt-image-2 access. Get one at https://platform.openai.com/api-keys. Your organization must be verified to use the gpt-image family.",
+      "sensitive": true,
+      "required": true
+    },
+    "OPENAI_IMAGE_MODEL": {
+      "type": "string",
+      "title": "Model ID (optional)",
+      "description": "Override the model. Leave blank to use gpt-image-2.",
+      "default": "gpt-image-2",
+      "required": false
+    },
+    "MCP_GPT_IMAGE_2_OUTPUT_DIR": {
+      "type": "directory",
+      "title": "Output directory (optional)",
+      "description": "Where to save generated images. Defaults to ./generated_imgs in the current working directory.",
+      "required": false
+    },
+    "MCP_GPT_IMAGE_2_INLINE_IMAGE": {
+      "type": "string",
+      "title": "Return inline image data by default (optional)",
+      "description": "Set to \"false\" to skip embedding base64 image data in tool responses (saves context window). Defaults to \"true\".",
+      "default": "true",
+      "required": false
     }
   }
 }

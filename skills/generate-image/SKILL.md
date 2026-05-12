@@ -1,6 +1,6 @@
 ---
 name: generate-image
-description: Generate images using mcp-gpt-image-2 (OpenAI gpt-image-2) MCP tools with best-practice prompting. Use this skill when the user asks to create, generate, or edit images.
+description: Generate or edit images using OpenAI gpt-image-2. Use this skill any time the user asks to create, generate, illustrate, design, mock up, or edit an image — from product shots and diagrams to marketing visuals and slide imagery. Works in Claude Code and Claude Cowork.
 allowed-tools: mcp__gpt-image-2__generate_image, mcp__gpt-image-2__edit_image, mcp__gpt-image-2__continue_editing, mcp__gpt-image-2__get_configuration_status, mcp__gpt-image-2__get_last_image_info
 ---
 
@@ -10,13 +10,11 @@ Use the `generate_image`, `edit_image`, and `continue_editing` MCP tools from th
 
 ## First-Time Setup
 
-Before generating images, verify the API key is configured:
+If you aren't sure the API key is configured, call `get_configuration_status`. If `OPENAI_API_KEY` is missing:
 
-1. Call `get_configuration_status` to check if `OPENAI_API_KEY` is set.
-2. If the key is missing, instruct the user to add it to their MCP server environment configuration:
-   - In Claude Code settings or `.claude/settings.json`, add `OPENAI_API_KEY` to the server's `env` block.
-   - The key can be obtained from [OpenAI Platform](https://platform.openai.com/api-keys).
-   - Note: OpenAI gates the gpt-image family behind organization verification — complete it in the developer console if you get a 403.
+- Tell the user the plugin needs an OpenAI API key from https://platform.openai.com/api-keys.
+- If they installed the plugin via marketplace, they can re-run the setup or set the value in their plugin configuration (the manifest exposes `OPENAI_API_KEY` as a `userConfig` field).
+- Note: OpenAI gates the gpt-image family behind organization verification — complete it at https://platform.openai.com/settings/organization/general if you get a 403.
 
 ## Prompting Best Practices
 
@@ -57,4 +55,4 @@ Before generating images, verify the API key is configured:
 
 ## Context Window Management
 
-When generating images in Claude Code, set `returnInlineImage: false` to prevent base64 image data from filling the context window. The image is still saved to disk — just tell the user where to find it.
+Base64 image data inlined in tool responses can fill the context window quickly (a 1024x1024 PNG is ~800 KB). Set `returnInlineImage: false` (or set the plugin's `MCP_GPT_IMAGE_2_INLINE_IMAGE` user config to `"false"`) to skip embedding it. The image is still saved to disk — tell the user the file path.

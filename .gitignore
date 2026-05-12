@@ -2,4 +2,3 @@ node_modules/
 generated_imgs/
 *.tsbuildinfo
 .env
-.mcp.json
