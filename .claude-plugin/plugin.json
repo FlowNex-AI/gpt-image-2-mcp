@@ -7,8 +7,8 @@
   "repository": "https://github.com/FlowNex-AI/gpt-image-2-mcp",
   "mcpServers": {
     "gpt-image-2": {
-      "command": "npx",
-      "args": ["-y", "mcp-gpt-image-2@0.1.0"]
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"]
     }
   }
 }

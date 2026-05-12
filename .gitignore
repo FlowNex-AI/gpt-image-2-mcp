@@ -1,5 +1,4 @@
 node_modules/
-dist/
 generated_imgs/
 *.tsbuildinfo
 .env
