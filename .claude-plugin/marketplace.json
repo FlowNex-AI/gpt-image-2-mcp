@@ -10,7 +10,7 @@
       "name": "gpt-image-2",
       "source": "./",
       "description": "Image generation with OpenAI gpt-image-2 via MCP",
-      "version": "0.1.4"
+      "version": "0.1.5"
     }
   ]
 }
