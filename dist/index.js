@@ -26986,7 +26986,7 @@ import os from "os";
 import path from "path";
 
 // src/version.ts
-var VERSION2 = "0.1.5";
+var VERSION2 = "0.1.6";
 
 // src/index.ts
 var DEFAULT_MODEL = "gpt-image-2";
