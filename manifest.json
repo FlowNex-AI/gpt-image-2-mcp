@@ -1,0 +1,109 @@
+{
+  "manifest_version": "0.2",
+  "name": "gpt-image-2",
+  "display_name": "GPT Image 2",
+  "version": "0.1.4",
+  "description": "Generate and edit images with OpenAI gpt-image-2.",
+  "long_description": "MCP server for OpenAI's gpt-image-2 image generation model. Generate new images, edit existing ones with reference images and masks, and iterate on the last result. Jobs run in the background and are polled with check_image_job, so long generations never hit request timeouts.",
+  "author": {
+    "name": "FlowNex AI",
+    "email": "alvaro@flownexai.com",
+    "url": "https://flownexai.com"
+  },
+  "homepage": "https://github.com/FlowNex-AI/gpt-image-2-mcp",
+  "documentation": "https://github.com/FlowNex-AI/gpt-image-2-mcp",
+  "support": "https://github.com/FlowNex-AI/gpt-image-2-mcp/issues",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "${user_config.openai_api_key}",
+        "OPENAI_IMAGE_MODEL": "${user_config.model}",
+        "MCP_GPT_IMAGE_2_OUTPUT_DIR": "${user_config.output_dir}",
+        "MCP_GPT_IMAGE_2_INLINE_IMAGE": "${user_config.inline_image}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "generate_image",
+      "description": "Starts generating a NEW image with OpenAI gpt-image-2. Returns a jobId immediately; generation runs in the background (10–180s). You must call check_image_job(jobId) every ~5s until status is \"completed\". Use it only for brand-new images, not to modify existing ones."
+    },
+    {
+      "name": "edit_image",
+      "description": "Starts editing a specific existing image file, optionally with additional reference images (up to 16 in total) and a PNG mask. Returns a jobId immediately; poll with check_image_job."
+    },
+    {
+      "name": "continue_editing",
+      "description": "Starts editing the LAST image generated or edited in this session, optionally with reference images and a mask. Returns a jobId immediately; poll with check_image_job."
+    },
+    {
+      "name": "check_image_job",
+      "description": "Polls the status of a job started by generate_image, edit_image or continue_editing. Returns { status: \"pending\" } while running, { status: \"completed\", ... } with the saved file path (and inline base64 if enabled), or { status: \"failed\", error }. Call it every 5–10s."
+    },
+    {
+      "name": "get_configuration_status",
+      "description": "Checks whether the OpenAI API key is configured and which model is active."
+    },
+    {
+      "name": "get_last_image_info",
+      "description": "Gets information about the last generated/edited image in this session."
+    }
+  ],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API key",
+      "description": "OpenAI API key with gpt-image-2 access. Get one at https://platform.openai.com/api-keys. Your organization must be verified to use the gpt-image family.",
+      "sensitive": true,
+      "required": true
+    },
+    "model": {
+      "type": "string",
+      "title": "Model ID",
+      "description": "Override the model. Leave as gpt-image-2 unless you need another one.",
+      "default": "gpt-image-2",
+      "required": false
+    },
+    "output_dir": {
+      "type": "directory",
+      "title": "Output directory",
+      "description": "Where to save generated images.",
+      "default": "${HOME}/Pictures/gpt-image-2",
+      "required": false
+    },
+    "inline_image": {
+      "type": "boolean",
+      "title": "Return inline image data",
+      "description": "Embed base64 image data in tool responses. Disable to save context window.",
+      "default": true,
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "keywords": [
+    "image generation",
+    "image editing",
+    "openai",
+    "gpt-image-2"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FlowNex-AI/gpt-image-2-mcp.git"
+  }
+}

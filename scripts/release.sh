@@ -8,9 +8,10 @@ set -euo pipefail
 #   ./scripts/release.sh <major|minor|patch>   (default: patch)
 #
 # Publishes @flownex-ai/mcp-gpt-image-2 to npm under the @flownex-ai org.
-# The marketplace.json source is { npm: "@flownex-ai/mcp-gpt-image-2" }, so
-# Claude Code and Claude Cowork resolve the new version automatically once
-# this script finishes.
+# The marketplace.json source is the repo itself ("./"), so Claude Code and
+# Claude Cowork pick up the new version from GitHub once the tag is pushed.
+# dist/index.js is a self-contained esbuild bundle committed to git: Cowork
+# does not run `npm install`, so the plugin must not need node_modules.
 # ---------------------------------------------------------------------------
 
 BUMP="${1:-patch}"
@@ -75,6 +76,15 @@ node -e "
   const p = '.claude-plugin/marketplace.json';
   const j = JSON.parse(fs.readFileSync(p, 'utf8'));
   j.plugins[0].version = '$NEW_VERSION';
+  fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+"
+
+# manifest.json version (MCPB bundle for Claude Desktop Extensions).
+node -e "
+  const fs = require('fs');
+  const p = 'manifest.json';
+  const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+  j.version = '$NEW_VERSION';
   fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
 "
 

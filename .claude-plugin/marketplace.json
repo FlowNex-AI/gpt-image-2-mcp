@@ -8,10 +8,7 @@
   "plugins": [
     {
       "name": "gpt-image-2",
-      "source": {
-        "source": "npm",
-        "package": "@flownex-ai/mcp-gpt-image-2"
-      },
+      "source": "./",
       "description": "Image generation with OpenAI gpt-image-2 via MCP",
       "version": "0.1.4"
     }

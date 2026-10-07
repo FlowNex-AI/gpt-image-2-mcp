@@ -13,7 +13,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import OpenAI, { toFile } from "openai";
 import fs from "fs/promises";
-import { createReadStream } from "fs";
+import { accessSync, constants as fsConstants, createReadStream } from "fs";
+import os from "os";
 import path from "path";
 import { VERSION } from "./version.js";
 
@@ -84,13 +85,28 @@ function getModelId(): string {
 }
 
 function getOutputDir(): string {
-  return process.env.MCP_GPT_IMAGE_2_OUTPUT_DIR || path.join(process.cwd(), "generated_imgs");
+  if (process.env.MCP_GPT_IMAGE_2_OUTPUT_DIR) return process.env.MCP_GPT_IMAGE_2_OUTPUT_DIR;
+  // Claude Code launches the server in the project folder; Claude Desktop and
+  // Cowork may launch it in "/" or another read-only location.
+  const cwd = process.cwd();
+  if (cwd !== path.parse(cwd).root && isWritable(cwd)) return path.join(cwd, "generated_imgs");
+  return path.join(os.homedir(), "Pictures", "gpt-image-2");
+}
+
+function isWritable(dir: string): boolean {
+  try {
+    accessSync(dir, fsConstants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function resolveInlineImage(perCall: boolean | undefined): boolean {
   if (perCall !== undefined) return perCall;
   const env = process.env.MCP_GPT_IMAGE_2_INLINE_IMAGE;
-  if (env !== undefined) return env === "true";
+  // Unset plugin options arrive as an empty string.
+  if (env) return env === "true";
   return true; // default
 }
 

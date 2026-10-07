@@ -36,14 +36,14 @@
     "MCP_GPT_IMAGE_2_OUTPUT_DIR": {
       "type": "directory",
       "title": "Output directory (optional)",
-      "description": "Where to save generated images. Defaults to ./generated_imgs in the current working directory.",
+      "description": "Where to save generated images. Defaults to ./generated_imgs in the project folder, or ~/Pictures/gpt-image-2 when that folder is not writable.",
       "required": false
     },
     "MCP_GPT_IMAGE_2_INLINE_IMAGE": {
-      "type": "string",
-      "title": "Return inline image data by default (optional)",
-      "description": "Set to \"false\" to skip embedding base64 image data in tool responses (saves context window). Defaults to \"true\".",
-      "default": "true",
+      "type": "boolean",
+      "title": "Return inline image data by default",
+      "description": "Embed base64 image data in tool responses. Disable to save context window.",
+      "default": true,
       "required": false
     }
   }

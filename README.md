@@ -29,7 +29,7 @@ Get one from [OpenAI Platform](https://platform.openai.com/api-keys). OpenAI gat
 # 1. Add the marketplace
 claude plugin marketplace add FlowNex-AI/gpt-image-2-mcp
 
-# 2. Install (pulls @flownex-ai/mcp-gpt-image-2 from npm)
+# 2. Install
 claude plugin install gpt-image-2@mcp-gpt-image-2-plugins
 ```
 
@@ -39,11 +39,11 @@ Alternative: inside Claude Code, run `/plugin` for an interactive picker.
 
 ### B) In Claude Cowork
 
-Cowork installs plugins from npm. The package is published as **`@flownex-ai/mcp-gpt-image-2`**.
+Cowork installs plugins from the GitHub marketplace in this repo. The server ships as a self-contained bundle (`dist/index.js`), so no `npm install` is needed.
 
 1. Open the Claude desktop app → **Cowork** tab.
-2. Sidebar → **Customize** → **Browse plugins** → **Add custom plugin** (or **Install from npm**).
-3. Paste the package name: `@flownex-ai/mcp-gpt-image-2`
+2. Sidebar → **Customize** → **Browse plugins** → add the marketplace `FlowNex-AI/gpt-image-2-mcp`.
+3. Install **gpt-image-2**.
 4. When prompted, paste your `OPENAI_API_KEY` (driven by `userConfig` in `plugin.json`, stored in the system keychain).
 5. The `generate-image` and `powerpoint-images` skills become available — try *"make me a hero image for slide 1 of my QBR deck"*.
 
@@ -152,7 +152,7 @@ Get path and size of the last generated image.
 |----------|---------|-------------|
 | `OPENAI_API_KEY` | (required) | OpenAI API key |
 | `OPENAI_IMAGE_MODEL` | `gpt-image-2` | Model ID override (e.g. `gpt-image-2-2026-04-21`, `gpt-image-1`) |
-| `MCP_GPT_IMAGE_2_OUTPUT_DIR` | `./generated_imgs` | Image save directory |
+| `MCP_GPT_IMAGE_2_OUTPUT_DIR` | `./generated_imgs` (or `~/Pictures/gpt-image-2` if the working dir is not writable) | Image save directory |
 | `MCP_GPT_IMAGE_2_INLINE_IMAGE` | `true` | Default for `returnInlineImage` |
 
 ## Size Constraints
